@@ -74,7 +74,7 @@ class LLMCoordinator(DataUpdateCoordinator):
     async def async_call_service(self, service: str) -> dict[str, Any]:
         """Führt einen Start-/Stop-Befehl über die API aus."""
         action = SERVICE_ACTIONS.get(service, service)
-        url = f"{self._api_prefix}/{action}"
+        url = f"{self._api_prefix}/api/{action}"
         logger.info("%s auf %s", service, url)
         async with async_get_clientsession(self.hass).post(url, timeout=10) as resp:
             resp.raise_for_status()
