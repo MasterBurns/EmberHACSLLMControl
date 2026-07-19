@@ -15,15 +15,13 @@ import asyncio
 import json
 import logging
 import os
-import signal
 import sys
 from pathlib import Path
-from subprocess import DEVNULL
 
 import aiohttp
 import psutil
 import yaml
-from aiohttp import web
+from aiohttp import ClientTimeout, web
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = SCRIPT_DIR / "config.yaml"
@@ -39,11 +37,10 @@ class LLMManager:
         self._command = config.get("command", [])
         self._cwd = config.get("cwd", "")
         self._process_match = config.get("process_match", "")
-        self._process = None
-        self._managed_pid = None
+        self._managed_process = None
 
     def find_process(self):
-        """Gibt die laufende LLM-Prozess-Information zurück oder None."""
+        """Gibt die laufende LLM-Prozess-Information fuer RAM/CPU zurueck oder None."""
         target = None
         for proc in psutil.process_iter(["pid", "cmdline", "name", "status"]):
             try:
@@ -73,13 +70,19 @@ class LLMManager:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return None
 
+    def is_managed_running(self):
+        if not self._managed_process:
+            return False
+        return self._managed_process.returncode is None
+
     async def check_health(self, pid=None):
-        """Prüft die API-/Health-URL der LLM, falls konfiguriert."""
+        """Prueft die API-/Health-URL der LLM, falls konfiguriert."""
         if not self._health_url:
             return None
         try:
+            timeout = ClientTimeout(total=3)
             async with aiohttp.ClientSession() as session:
-                async with session.get(self._health_url, timeout=3) as resp:
+                async with session.get(self._health_url, timeout=timeout) as resp:
                     data = await resp.json()
                     data["pid"] = pid
                     return data
@@ -87,10 +90,44 @@ class LLMManager:
             logger.debug("Health check failed: %s", exc)
             return {"status": "error", "error": str(exc), "pid": pid}
 
+    async def drain_pipe(self, pipe, log_level=logging.INFO):
+        """Verhindert Blockaden durch volle Subprocess-Pipes."""
+        while True:
+            line = await pipe.readline()
+            if line:
+                text = line.decode("utf-8", errors="replace").rstrip("\n")
+                logger.log(log_level, text)
+            else:
+                break
+
+    async def wait_for_health(self, timeout=120):
+        """Wartet, bis der LLM-Server antwortet."""
+        if not self._health_url or not self._managed_process:
+            return None
+
+        start = asyncio.get_event_loop().time()
+        while True:
+            if self._managed_process.returncode is not None:
+                raise RuntimeError(f"LLM-Prozess mit PID {self._managed_process.pid} wurde beendet.")
+            try:
+                timeout_val = ClientTimeout(total=1)
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(self._health_url, timeout=timeout_val) as resp:
+                        data = await resp.json()
+                        data["pid"] = self._managed_process.pid
+                        return data
+            except Exception:
+                pass
+
+            if asyncio.get_event_loop().time() - start > timeout:
+                raise TimeoutError(f"Health-Check unter {self._health_url} dauerte zu lang.")
+            await asyncio.sleep(0.5)
+        return None
+
     async def start(self):
         """Startet den konfigurierten LLM-Prozess."""
-        if self.find_process():
-            raise RuntimeError("LLM-Prozess läuft bereits.")
+        if self.is_managed_running():
+            raise RuntimeError("LLM-Prozess laeuft bereits.")
         command = self._command if isinstance(self._command, list) else [str(self._command)]
         env = os.environ.copy()
         args = []
@@ -104,7 +141,7 @@ class LLMManager:
         if not args:
             raise ValueError("Kein Startbefehl in config.yaml konfiguriert.")
         cwd = self._cwd if isinstance(self._cwd, str) and self._cwd else None
-        self._process = await asyncio.create_subprocess_exec(
+        self._managed_process = await asyncio.create_subprocess_exec(
             args[0],
             *args[1:],
             cwd=cwd or None,
@@ -113,32 +150,52 @@ class LLMManager:
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
         )
-        self._managed_pid = self._process.pid
-        logger.info("LLM-Prozess gestartet: %s PID=%s", args[0], self._managed_pid)
-        await asyncio.sleep(2)
+        logger.info("LLM-Prozess gestartet: %s PID=%s", args[0], self._managed_process.pid)
+
+        async def drain():
+            while self._managed_process and self._managed_process.returncode is None:
+                await self.drain_pipe(self._managed_process.stdout, logging.INFO)
+                await self.drain_pipe(self._managed_process.stderr, logging.WARNING)
+                await asyncio.sleep(0.2)
+
+        asyncio.create_task(drain())
+        await self.wait_for_health(timeout=120)
         return await self.status()
 
     async def stop(self):
-        """Stoppt alle gefundenen LLM-Prozesse."""
-        proc = self.find_process()
-        if proc:
-            for p in psutil.process_iter(["pid", "cmdline"]):
-                try:
-                    if any(self._process_match in part for part in (p.info.get("cmdline") or [])):
-                        p.kill()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            return await self.status()
-        raise RuntimeError("Kein LLM-Prozess gefunden.")
+        """Stoppt den gestarteten LLM-Prozess."""
+        if not self._managed_process or not self.is_managed_running():
+            raise RuntimeError("Kein gestarteter LLM-Prozess gefunden.")
+        try:
+            self._managed_process.terminate()
+            await asyncio.wait_for(self._managed_process.wait(), timeout=10)
+        except Exception:
+            self._managed_process.kill()
+        return await self.status()
 
     async def status(self):
-        process = self.find_process()
+        managed_running = self.is_managed_running()
+        process = None
+        if managed_running and self._managed_process:
+            process = {
+                "pid": self._managed_process.pid,
+                "status": "managed_running",
+                "managed": True,
+                "cpu_percent": 0,
+                "memory_mb": 0,
+            }
+            try:
+                psutil_proc = psutil.Process(self._managed_process.pid)
+                process["cpu_percent"] = psutil_proc.cpu_percent(interval=0.1)
+                process["memory_mb"] = round(psutil_proc.memory_info().rss / 1024 / 1024, 2)
+            except Exception:
+                pass
         health = None
         if process and self._health_url:
             health = await self.check_health(process["pid"])
         return {
             "name": self._name,
-            "running": process is not None,
+            "running": managed_running,
             "process": process,
             "health": health,
             "port": self._port,
