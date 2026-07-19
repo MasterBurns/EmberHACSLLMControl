@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 import aiohttp
@@ -44,7 +45,7 @@ class LLMCoordinator(DataUpdateCoordinator):
             hass,
             logger,
             name=name,
-            update_interval=None,
+            update_interval=timedelta(seconds=scan_interval),
         )
         self.api_url = api_url
         self.scan_interval = scan_interval
@@ -67,7 +68,7 @@ class LLMCoordinator(DataUpdateCoordinator):
         return data
 
     async def update_status(self, data: dict[str, Any]) -> None:
-        """Aktualisiert gespeicherte Werte ohne komplette Refresh-Routine."""
+        """Aktualisiert gespeicherte Werte."""
         self.data = data
 
     async def async_call_service(self, service: str) -> dict[str, Any]:
@@ -78,6 +79,7 @@ class LLMCoordinator(DataUpdateCoordinator):
         async with async_get_clientsession(self.hass).post(url, timeout=10) as resp:
             data = await resp.json()
         await self.update_status(data)
+        self.async_request_refresh()
         return data
 
     def _process_attrs(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -103,7 +105,7 @@ class LLMCoordinator(DataUpdateCoordinator):
             attrs[ATTR_MEMORY_MB] = None
         attrs[ATTR_PORT] = data.get("port")
         if health:
-            attrs[ATTR_HEALTH_OK] = health.get("ok")
+            attrs[ATTR_HEALTH_OK] = health.get("status") == "ok"
             attrs[ATTR_HEALTH_ERROR] = health.get("error")
         return attrs
 

@@ -43,23 +43,34 @@ class LLMManager:
 
     def find_process(self):
         """Gibt die laufende LLM-Prozess-Information zurück oder None."""
-        for proc in psutil.process_iter(["pid", "cmdline", "name", "status", "cpu_percent", "memory_info"]):
+        target = None
+        for proc in psutil.process_iter(["pid", "cmdline", "name", "status"]):
             try:
                 info = proc.info
                 cmdline = info.get("cmdline") or []
                 if info.get("name") == self._process_match or any(
                     self._process_match in part for part in cmdline
                 ):
-                    return {
-                        "pid": info.get("pid"),
-                        "status": info.get("status"),
-                        "cmdline": " ".join(cmdline),
-                        "cpu_percent": info.get("cpu_percent") or 0.0,
-                        "memory_mb": (info.get("memory_info") or psutil.Process(proc.pid).memory_info()).rss / 1024 / 1024,
-                    }
+                    target = proc
+                    break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-        return None
+
+        if not target:
+            return None
+
+        try:
+            mem = target.memory_info()
+            cpu = target.cpu_percent(interval=0.1)
+            return {
+                "pid": target.pid,
+                "status": target.status(),
+                "cmdline": " ".join(target.cmdline()),
+                "cpu_percent": cpu,
+                "memory_mb": round(mem.rss / 1024 / 1024, 2),
+            }
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return None
 
     async def check_health(self, pid=None):
         """Prüft die API-/Health-URL der LLM, falls konfiguriert."""
@@ -73,7 +84,7 @@ class LLMManager:
                     return data
         except Exception as exc:
             logger.debug("Health check failed: %s", exc)
-            return {"ok": False, "error": str(exc), "pid": pid}
+            return {"status": "error", "error": str(exc), "pid": pid}
 
     async def start(self):
         """Startet die LLM mit der konfigurierten Kommandozeile."""
@@ -103,7 +114,6 @@ class LLMManager:
         """Stoppt alle gefundenen LLM-Prozesse."""
         proc = self.find_process()
         if proc:
-            pid = proc["pid"]
             for p in psutil.process_iter(["pid", "cmdline"]):
                 try:
                     if any(self._process_match in part for part in (p.info.get("cmdline") or [])):
