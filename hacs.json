@@ -4,5 +4,6 @@
   "content_in_root": false,
   "domains": [],
   "country": [],
-  "platform": "sensor"
+  "license": "MIT",
+  "platforms": ["all"]
 }
