@@ -40,6 +40,7 @@ class LLMManager:
         self._cwd = config.get("cwd", "")
         self._process_match = config.get("process_match", "")
         self._process = None
+        self._managed_pid = None
 
     def find_process(self):
         """Gibt die laufende LLM-Prozess-Information zurück oder None."""
@@ -106,12 +107,14 @@ class LLMManager:
         self._process = await asyncio.create_subprocess_exec(
             args[0],
             *args[1:],
-            cwd=cwd,
+            cwd=cwd or None,
             env=env,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
         )
+        self._managed_pid = self._process.pid
+        logger.info("LLM-Prozess gestartet: %s PID=%s", args[0], self._managed_pid)
         await asyncio.sleep(2)
         return await self.status()
 
