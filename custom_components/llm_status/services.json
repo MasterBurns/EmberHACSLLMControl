@@ -1,0 +1,10 @@
+{
+  "start_llm": {
+    "name": "Start LLM",
+    "description": "Starts the configured local LLM process."
+  },
+  "stop_llm": {
+    "name": "Stop LLM",
+    "description": "Stops the running local LLM process."
+  }
+}
