@@ -7,6 +7,7 @@ from typing import Any
 
 import aiohttp
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -58,7 +59,7 @@ class LLMCoordinator(DataUpdateCoordinator):
         """Holt den aktuellen LLM-Status von der API."""
         logger.debug("Aktualisiere Status von %s", self.api_url)
         try:
-            async with self.hass.async_client_session.get(self.api_url, timeout=5) as resp:
+            async with async_get_clientsession(self.hass).get(self.api_url, timeout=10) as resp:
                 data = await resp.json()
         except Exception as exc:
             raise UpdateFailed(f"Fehler beim Abrufen des LLM-Status: {exc}") from exc
@@ -74,7 +75,7 @@ class LLMCoordinator(DataUpdateCoordinator):
         action = SERVICE_ACTIONS.get(service, service)
         url = f"{self._api_prefix}/api/{action}"
         logger.info("%s auf %s", service, url)
-        async with self.hass.async_client_session.post(url, timeout=10) as resp:
+        async with async_get_clientsession(self.hass).post(url, timeout=10) as resp:
             data = await resp.json()
         await self.update_status(data)
         return data
