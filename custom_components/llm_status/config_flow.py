@@ -61,9 +61,16 @@ class LLMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _check_url(self, url: str) -> bool:
         try:
             session = async_get_clientsession(self.hass)
-            async with session.get(url, timeout=5) as resp:
-                await resp.json()
+            async with session.get(url, timeout=10) as resp:
+                logger.info("Antwort von %s: %s", url, resp.status)
+                try:
+                    data = await resp.json()
+                    logger.info("JSON erhalten: %s", data)
+                except Exception:
+                    text = await resp.text()
+                    logger.warning("Kein JSON von %s: %s", url, text[:200])
+                    raise
                 return resp.status == 200
         except Exception as exc:
-            logger.debug("URL-Prüfung fehlgeschlagen: %s", exc)
+            logger.error("URL-Prüfung fehlgeschlagen für %s: %s", url, exc)
             return False

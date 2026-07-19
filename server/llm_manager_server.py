@@ -34,7 +34,7 @@ class LLMManager:
     def __init__(self, config: dict):
         self._config = config
         self._name = config.get("name", "local_llm")
-        self._port = int(config.get("port", 0))
+        self._port = int(config.get("manager_port", config.get("port", 8080)))
         self._health_url = config.get("health_url", "")
         self._command = config.get("command", [])
         self._cwd = config.get("cwd", "")
@@ -165,7 +165,8 @@ def create_app():
 def main():
     logging.basicConfig(level=logging.INFO)
     app = create_app()
-    web.run_app(app, host="127.0.0.1", port=8080, handle_signals=True)
+    config = yaml.safe_load(CONFIG_PATH.open()) or {}
+    web.run_app(app, host=config.get("host", "0.0.0.0"), port=config.get("port", 8080), handle_signals=True)
 
 
 if __name__ == "__main__":
