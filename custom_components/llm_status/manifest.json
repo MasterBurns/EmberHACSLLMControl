@@ -1,14 +1,15 @@
 {
   "domain": "llm_status",
   "name": "Local LLM Status",
-  "version": "1.0.0",
-  "documentation": "https://github.com/USERNAME/local-llm-status",
-  "issue_tracker": "https://github.com/USERNAME/local-llm-status/issues",
+  "version": "0.1.0",
+  "documentation": "https://github.com/MasterBurns/EmberHACSLLMControl",
+  "issue_tracker": "https://github.com/MasterBurns/EmberHACSLLMControl/issues",
   "i18n": true,
-  "codeowners": ["@USERNAME"],
+  "codeowners": ["MasterBurns"],
   "config_flow": true,
   "dependencies": [],
   "requirements": [],
-  "ssdt": true,
-  "homeassistant": "2024.1.0"
+  "ssdt": false,
+  "homeassistant": "2024.1.0",
+  "logging": false
 }
