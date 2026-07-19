@@ -1,0 +1,35 @@
+{
+  "title": "Local LLM Status",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Lokale LLM konfigurieren",
+        "data": {
+          "name": "Name",
+          "url": "URL des lokalen LLM-Manager-Servers",
+          "model": "Modellname",
+          "version": "Version",
+          "scan_interval": "Scan-Intervall in Sekunden"
+        },
+        "data_description": {
+          "url": "Vollständige URL der API, z. B. http://127.0.0.1:8080/api/status",
+          "scan_interval": "Wie oft der Status abgefragt wird"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung nicht möglich.",
+      "invalid_url": "Ungültige URL."
+    }
+  },
+  "services": {
+    "start": {
+      "name": "LLM starten",
+      "description": "Startet den konfigurierten LLM-Prozess."
+    },
+    "stop": {
+      "name": "LLM stoppen",
+      "description": "Stoppt den laufenden LLM-Prozess."
+    }
+  }
+}

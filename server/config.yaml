@@ -1,0 +1,23 @@
+# Konfiguration für den lokalen LLM-Manager-Server
+name: local_llm
+command:
+  - /home/masterburns/llm-workspace/llama.cpp/build/bin/llama-server
+  - -m
+  - /home/masterburns/llm-workspace/qwn3.6/Qwen3.6-27B-MTP-pi-tune-Q4_K_M.gguf
+  - -fa
+  - on
+  - -c
+  - "192000"
+  - -ngl
+  - "99"
+  - -ctk
+  - q4_0
+  - -ctv
+  - q4_0
+  - --port
+  - "11434"
+cwd: /home/masterburns/llm-workspace/llama.cpp
+port: 11434
+health_url: http://127.0.0.1:11434/health
+# Prozess-Kennung zur Suche in psutil (Teil der Kommandozeile oder Binärname)
+process_match: llama-server

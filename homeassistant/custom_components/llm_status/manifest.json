@@ -1,0 +1,14 @@
+{
+  "domain": "llm_status",
+  "name": "Local LLM Status",
+  "version": "1.0.0",
+  "documentation": "https://github.com/USERNAME/local-llm-status",
+  "issue_tracker": "https://github.com/USERNAME/local-llm-status/issues",
+  "i18n": true,
+  "codeowners": ["@USERNAME"],
+  "config_flow": true,
+  "dependencies": [],
+  "requirements": [],
+  "ssdt": true,
+  "homeassistant": "2024.1.0"
+}
