@@ -87,25 +87,26 @@ class LLMManager:
             return {"status": "error", "error": str(exc), "pid": pid}
 
     async def start(self):
-        """Startet die LLM mit der konfigurierten Kommandozeile."""
+        """Startet den konfigurierten LLM-Prozess."""
         if self.find_process():
             raise RuntimeError("LLM-Prozess läuft bereits.")
-        # Verwende asyncio.create_subprocess_exec für die ersten Argumente + argv[1:]
-        if not self._command:
+        command = self._command if isinstance(self._command, list) else [str(self._command)]
+        if not command:
             raise ValueError("Kein Startbefehl in config.yaml konfiguriert.")
-        executable = self._command[0]
-        args = self._command[1:]
+        executable = command[0]
+        args = command[1:]
+        cwd = self._cwd if isinstance(self._cwd, str) and self._cwd else None
         env = os.environ.copy()
-        if self._cwd:
-            env["CWD"] = self._cwd
+        if cwd:
+            env["CWD"] = cwd
         self._process = await asyncio.create_subprocess_exec(
             executable,
             *args,
-            cwd=self._cwd or None,
+            cwd=cwd,
             env=env,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
-            preexec_fn=os.setsid,
+            start_new_session=True,
         )
         await asyncio.sleep(2)
         return await self.status()
