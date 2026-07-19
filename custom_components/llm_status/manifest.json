@@ -1,7 +1,7 @@
 {
   "domain": "llm_status",
   "name": "Local LLM Status",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "documentation": "https://github.com/MasterBurns/EmberHACSLLMControl",
   "issue_tracker": "https://github.com/MasterBurns/EmberHACSLLMControl/issues",
   "i18n": true,

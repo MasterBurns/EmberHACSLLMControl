@@ -50,7 +50,7 @@ class LLMCoordinator(DataUpdateCoordinator):
         self.api_url = api_url
         self.scan_interval = scan_interval
         self._health_url = api_url.replace("/api/status", "/health", 1)
-        self._api_prefix = api_url.rsplit("/status", 1)[0] if api_url.endswith("/status") else api_url.rsplit("/api/status", 1)[0]
+        self._api_prefix = api_url.rsplit("/api/status", 1)[0] if "/api/status" in api_url else api_url.rsplit("/status", 1)[0]
 
     @property
     def health_url(self) -> str:
@@ -74,9 +74,10 @@ class LLMCoordinator(DataUpdateCoordinator):
     async def async_call_service(self, service: str) -> dict[str, Any]:
         """Führt einen Start-/Stop-Befehl über die API aus."""
         action = SERVICE_ACTIONS.get(service, service)
-        url = f"{self._api_prefix}/api/{action}"
+        url = f"{self._api_prefix}/{action}"
         logger.info("%s auf %s", service, url)
         async with async_get_clientsession(self.hass).post(url, timeout=10) as resp:
+            resp.raise_for_status()
             data = await resp.json()
         await self.update_status(data)
         self.async_request_refresh()
