@@ -91,17 +91,21 @@ class LLMManager:
         if self.find_process():
             raise RuntimeError("LLM-Prozess läuft bereits.")
         command = self._command if isinstance(self._command, list) else [str(self._command)]
-        if not command:
-            raise ValueError("Kein Startbefehl in config.yaml konfiguriert.")
-        executable = command[0]
-        args = command[1:]
-        cwd = self._cwd if isinstance(self._cwd, str) and self._cwd else None
         env = os.environ.copy()
-        if cwd:
-            env["CWD"] = cwd
+        args = []
+        for item in command:
+            item = str(item).strip()
+            if "=" in item and not item.startswith("-"):
+                key, _, value = item.partition("=")
+                env[key.strip()] = value.strip()
+            else:
+                args.append(item)
+        if not args:
+            raise ValueError("Kein Startbefehl in config.yaml konfiguriert.")
+        cwd = self._cwd if isinstance(self._cwd, str) and self._cwd else None
         self._process = await asyncio.create_subprocess_exec(
-            executable,
-            *args,
+            args[0],
+            *args[1:],
             cwd=cwd,
             env=env,
             stdout=asyncio.subprocess.DEVNULL,

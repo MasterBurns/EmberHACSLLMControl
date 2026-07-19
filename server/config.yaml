@@ -5,6 +5,7 @@ manager_port: 8080
 
 # LLM-Prozess
 command:
+  - HSA_ENABLE_SDMA=0
   - /home/masterburns/llm-workspace/llama.cpp/build/bin/llama-server
   - -m
   - /home/masterburns/llm-workspace/qwn3.6/Qwen3.6-27B-MTP-pi-tune-Q4_K_M.gguf
