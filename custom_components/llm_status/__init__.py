@@ -5,12 +5,42 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, PLATFORMS
+from .const import DOMAIN, PLATFORMS, SERVICE_START, SERVICE_STOP
 from .coordinator import LLMCoordinator
 
 logger = logging.getLogger(__name__)
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Richte die Domain und Services ein."""
+
+    def find_coordinator() -> LLMCoordinator:
+        """Finde den Coordinator des ersten llm_status Config-Entries."""
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if not entries:
+            raise HomeAssistantError("Kein Local LLM Status Eintrag konfiguriert.")
+        return hass.data[DOMAIN].get(entries[0].entry_id)
+
+    async def service_start(call) -> None:
+        """Startet den konfigurierten LLM-Prozess."""
+        coordinator = find_coordinator()
+        await coordinator.async_call_service(SERVICE_START)
+
+    async def service_stop(call) -> None:
+        """Stoppt den laufenden LLM-Prozess."""
+        coordinator = find_coordinator()
+        await coordinator.async_call_service(SERVICE_STOP)
+
+    for key, handler in {
+        SERVICE_START: service_start,
+        SERVICE_STOP: service_stop,
+    }.items():
+        hass.services.async_register(DOMAIN, key, handler)
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
