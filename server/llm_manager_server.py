@@ -241,10 +241,10 @@ class LLMManager:
                 prompt_tokens = 0
                 predicted_tokens = 0
                 for line in metrics_text.splitlines():
-                    if line.startswith("llamacpp:prompt_tokens_total "):
-                        prompt_tokens = int(line.split()[1])
-                    elif line.startswith("llamacpp:tokens_predicted_total "):
-                        predicted_tokens = int(line.split()[1])
+                    if line.startswith("llamacpp_prompt_tokens_total "):
+                        prompt_tokens = int(float(line.split()[1]))
+                    elif line.startswith("llamacpp_tokens_predicted_total "):
+                        predicted_tokens = int(float(line.split()[1]))
                 
                 metrics_data["encode_total"] = prompt_tokens
                 metrics_data["decode_total"] = predicted_tokens

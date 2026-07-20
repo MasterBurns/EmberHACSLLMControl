@@ -21,6 +21,7 @@ command:
   - q4_0
   - --port
   - 11434
+  - --metrics
 cwd: /home/masterburns/llm-workspace/llama.cpp
 llm_port: 11434
 health_url: http://127.0.0.1:11434/health
