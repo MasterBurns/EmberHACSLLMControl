@@ -96,13 +96,13 @@ class LLMOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current_interval = self.config_entry.options.get(
+        current_interval = int(self.config_entry.options.get(
             "scan_interval", self.config_entry.data.get("scan_interval", 60)
-        )
+        ))
 
         options_schema = vol.Schema(
             {
-                vol.Required("scan_interval", default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=5)),
+                vol.Required("scan_interval", default=current_interval): int,
             }
         )
 
