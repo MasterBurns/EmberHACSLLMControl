@@ -30,6 +30,10 @@ from .const import (
     ATTR_PORT,
     ATTR_PROCESS_CMDLINE,
     ATTR_PROCESS_CPU,
+    ATTR_ENCODE_TOTAL,
+    ATTR_DECODE_TOTAL,
+    ATTR_ENCODE_TPS,
+    ATTR_DECODE_TPS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MANUFACTURER,
@@ -79,6 +83,34 @@ SENSORS: tuple[LLMStatusSensorDescription, ...] = (
         key="llm_health",
         name="Gesundheitsstatus",
         icon="mdi:heart-pulse",
+    ),
+    LLMStatusSensorDescription(
+        key="llm_encode_tps",
+        name="Encode Durchsatz",
+        icon="mdi:speedometer",
+        unit_of_measurement="T/s",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    LLMStatusSensorDescription(
+        key="llm_decode_tps",
+        name="Decode Durchsatz",
+        icon="mdi:speedometer",
+        unit_of_measurement="T/s",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    LLMStatusSensorDescription(
+        key="llm_encode_total",
+        name="Encode Total",
+        icon="mdi:counter",
+        unit_of_measurement="Tokens",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    LLMStatusSensorDescription(
+        key="llm_decode_total",
+        name="Decode Total",
+        icon="mdi:counter",
+        unit_of_measurement="Tokens",
+        state_class=SensorStateClass.TOTAL_INCREASING,
     ),
 )
 
@@ -147,6 +179,14 @@ class LLMStatusSensor(CoordinatorEntity, SensorEntity):
             return attrs.get(ATTR_MEMORY_MB)
         if key == "llm_health":
             return "healthy" if attrs.get(ATTR_HEALTH_OK) else "error"
+        if key == "llm_encode_tps":
+            return attrs.get(ATTR_ENCODE_TPS)
+        if key == "llm_decode_tps":
+            return attrs.get(ATTR_DECODE_TPS)
+        if key == "llm_encode_total":
+            return attrs.get(ATTR_ENCODE_TOTAL)
+        if key == "llm_decode_total":
+            return attrs.get(ATTR_DECODE_TOTAL)
         return None
 
     @property

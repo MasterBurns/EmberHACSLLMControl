@@ -6,5 +6,9 @@
   "stop_llm": {
     "name": "Stop LLM",
     "description": "Stops the running local LLM process."
+  },
+  "shutdown_pc": {
+    "name": "Shutdown PC",
+    "description": "Shuts down the PC hosting the LLM process."
   }
 }

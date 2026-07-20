@@ -9,7 +9,7 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -32,6 +32,12 @@ class LLMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Leitet den Benutzer durch die Einrichtung von Local LLM Status."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return LLMOptionsFlowHandler(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -74,3 +80,30 @@ class LLMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as exc:
             logger.error("URL-Prüfung fehlgeschlagen für %s: %s", url, exc)
             return False
+
+
+class LLMOptionsFlowHandler(config_entries.OptionsFlow):
+    """Behandelt die Optionen für Local LLM Status."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialisierung."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage die Optionen."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_interval = self.config_entry.options.get(
+            "scan_interval", self.config_entry.data.get("scan_interval", 60)
+        )
+
+        options_schema = vol.Schema(
+            {
+                vol.Required("scan_interval", default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=5)),
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=options_schema)

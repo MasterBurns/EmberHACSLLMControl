@@ -23,6 +23,10 @@ from .const import (
     ATTR_PORT,
     ATTR_PROCESS_CMDLINE,
     ATTR_PROCESS_CPU,
+    ATTR_ENCODE_TOTAL,
+    ATTR_DECODE_TOTAL,
+    ATTR_ENCODE_TPS,
+    ATTR_DECODE_TPS,
     DOMAIN,
     DEFAULT_SCAN_INTERVAL,
     SERVICE_ACTIONS,
@@ -108,6 +112,13 @@ class LLMCoordinator(DataUpdateCoordinator):
         if health:
             attrs[ATTR_HEALTH_OK] = health.get("status") == "ok"
             attrs[ATTR_HEALTH_ERROR] = health.get("error")
+            
+        metrics = data.get("metrics") or {}
+        attrs[ATTR_ENCODE_TOTAL] = metrics.get("encode_total", 0)
+        attrs[ATTR_DECODE_TOTAL] = metrics.get("decode_total", 0)
+        attrs[ATTR_ENCODE_TPS] = metrics.get("encode_tps", 0.0)
+        attrs[ATTR_DECODE_TPS] = metrics.get("decode_tps", 0.0)
+        
         return attrs
 
     def get_status_attrs(self) -> dict[str, Any]:

@@ -38,6 +38,22 @@ class LLMManager:
         self._cwd = config.get("cwd", "")
         self._process_match = config.get("process_match", "")
         self._managed_process = None
+        self._last_metrics = {}
+        self._last_metrics_time = 0
+
+    async def fetch_metrics(self):
+        if not self._health_url:
+            return None
+        metrics_url = self._health_url.replace("/health", "/metrics")
+        try:
+            timeout = ClientTimeout(total=2)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(metrics_url, timeout=timeout) as resp:
+                    if resp.status == 200:
+                        return await resp.text()
+        except Exception as exc:
+            logger.debug("Metrics fetch failed: %s", exc)
+        return None
 
     def find_process(self):
         """Gibt die laufende LLM-Prozess-Information fuer RAM/CPU zurueck oder None."""
@@ -126,7 +142,7 @@ class LLMManager:
 
     async def start(self):
         """Startet den konfigurierten LLM-Prozess."""
-        if self.is_managed_running():
+        if self.is_managed_running() or self.find_process() is not None:
             raise RuntimeError("LLM-Prozess laeuft bereits.")
         command = self._command if isinstance(self._command, list) else [str(self._command)]
         env = os.environ.copy()
@@ -164,18 +180,34 @@ class LLMManager:
 
     async def stop(self):
         """Stoppt den gestarteten LLM-Prozess."""
-        if not self._managed_process or not self.is_managed_running():
-            raise RuntimeError("Kein gestarteter LLM-Prozess gefunden.")
-        try:
-            self._managed_process.terminate()
-            await asyncio.wait_for(self._managed_process.wait(), timeout=10)
-        except Exception:
-            self._managed_process.kill()
+        # 1. Beende den vom Skript gestarteten Prozess
+        if self._managed_process and self.is_managed_running():
+            try:
+                self._managed_process.terminate()
+                await asyncio.wait_for(self._managed_process.wait(), timeout=10)
+            except Exception:
+                self._managed_process.kill()
+            self._managed_process = None
+
+        # 2. Beende manuell gestartete Prozesse
+        found = self.find_process()
+        if found:
+            try:
+                proc = psutil.Process(found["pid"])
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except psutil.TimeoutExpired:
+                    proc.kill()
+            except psutil.NoSuchProcess:
+                pass
+                
         return await self.status()
 
     async def status(self):
         managed_running = self.is_managed_running()
         process = None
+        
         if managed_running and self._managed_process:
             process = {
                 "pid": self._managed_process.pid,
@@ -190,14 +222,50 @@ class LLMManager:
                 process["memory_mb"] = round(psutil_proc.memory_info().rss / 1024 / 1024, 2)
             except Exception:
                 pass
+        else:
+            found = self.find_process()
+            if found:
+                process = found
+                process["managed"] = False
+
+        is_running = process is not None
         health = None
+        metrics_data = {"encode_total": 0, "decode_total": 0, "encode_tps": 0.0, "decode_tps": 0.0}
+
         if process and self._health_url:
             health = await self.check_health(process["pid"])
+            metrics_text = await self.fetch_metrics()
+            if metrics_text:
+                import time
+                current_time = time.time()
+                prompt_tokens = 0
+                predicted_tokens = 0
+                for line in metrics_text.splitlines():
+                    if line.startswith("llamacpp:prompt_tokens_total "):
+                        prompt_tokens = int(line.split()[1])
+                    elif line.startswith("llamacpp:tokens_predicted_total "):
+                        predicted_tokens = int(line.split()[1])
+                
+                metrics_data["encode_total"] = prompt_tokens
+                metrics_data["decode_total"] = predicted_tokens
+                
+                if self._last_metrics_time > 0:
+                    dt = current_time - self._last_metrics_time
+                    if dt > 0:
+                        encode_diff = prompt_tokens - self._last_metrics.get("encode_total", 0)
+                        decode_diff = predicted_tokens - self._last_metrics.get("decode_total", 0)
+                        metrics_data["encode_tps"] = round(max(0, encode_diff / dt), 2)
+                        metrics_data["decode_tps"] = round(max(0, decode_diff / dt), 2)
+                        
+                self._last_metrics = metrics_data
+                self._last_metrics_time = current_time
+
         return {
             "name": self._name,
-            "running": managed_running,
+            "running": is_running,
             "process": process,
             "health": health,
+            "metrics": metrics_data,
             "port": self._port,
         }
 
@@ -218,6 +286,15 @@ async def handle_stop(request):
     return web.json_response(await manager.stop())
 
 
+async def handle_shutdown(request):
+    logger.info("System shutdown requested via API")
+    async def do_shutdown():
+        await asyncio.sleep(1)
+        os.system("sudo shutdown -h now")
+    asyncio.create_task(do_shutdown())
+    return web.json_response({"status": "shutting_down"})
+
+
 def create_app():
     global manager
 
@@ -233,6 +310,7 @@ def create_app():
     app.router.add_get("/api/status", handle_status)
     app.router.add_post("/api/start", handle_start)
     app.router.add_post("/api/stop", handle_stop)
+    app.router.add_post("/api/system_shutdown", handle_shutdown)
     app.router.add_get("/", handle_status)
     return app
 
