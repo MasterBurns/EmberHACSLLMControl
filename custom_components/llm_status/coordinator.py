@@ -68,6 +68,16 @@ class LLMCoordinator(DataUpdateCoordinator):
                 data = await resp.json()
         except Exception as exc:
             raise UpdateFailed(f"Fehler beim Abrufen des LLM-Status: {exc}") from exc
+            
+        metrics = data.get("metrics") or {}
+        encode_tps = metrics.get("encode_tps", 0)
+        decode_tps = metrics.get("decode_tps", 0)
+        
+        if encode_tps > 0 or decode_tps > 0:
+            self.update_interval = timedelta(seconds=1)
+        else:
+            self.update_interval = timedelta(seconds=self.scan_interval)
+            
         await self.update_status(data)
         return data
 
