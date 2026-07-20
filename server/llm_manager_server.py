@@ -44,15 +44,80 @@ class LLMManager:
     async def fetch_metrics(self):
         if not self._health_url:
             return None
-        metrics_url = self._health_url.replace("/health", "/metrics")
+        
         try:
             timeout = ClientTimeout(total=2)
+            slots_url = self._config.get("slots_url", f"http://127.0.0.1:{self._config.get('llm_port', 11434)}/slots")
+            
+            # Initialize tracking structures if not present
+            if not hasattr(self, '_slot_totals'):
+                self._slot_totals = {}
+                self._global_prompt_total = 0
+                self._global_decoded_total = 0
+                self._last_metrics_time = 0
+                self._last_metrics_totals = {"encode": 0, "decode": 0}
+
             async with aiohttp.ClientSession() as session:
-                async with session.get(metrics_url, timeout=timeout) as resp:
+                async with session.get(slots_url, timeout=timeout) as resp:
                     if resp.status == 200:
-                        return await resp.text()
-        except Exception as exc:
-            logger.debug("Metrics fetch failed: %s", exc)
+                        slots_data = await resp.json()
+                        
+                        current_time = time.time()
+                        metrics_data = {"encode_total": 0, "decode_total": 0, "encode_tps": 0.0, "decode_tps": 0.0}
+                        
+                        for slot in slots_data:
+                            slot_id = slot.get("id", 0)
+                            
+                            # Parse prompt tokens
+                            current_prompt = slot.get("n_prompt_tokens_processed")
+                            if current_prompt is None:
+                                current_prompt = 0
+                                
+                            # Parse decoded tokens
+                            current_decoded = 0
+                            next_token_info = slot.get("next_token")
+                            if next_token_info and isinstance(next_token_info, list) and len(next_token_info) > 0:
+                                current_decoded = next_token_info[0].get("n_decoded", 0)
+                            
+                            if slot_id not in self._slot_totals:
+                                self._slot_totals[slot_id] = {"prompt": 0, "decoded": 0}
+                                
+                            last_prompt = self._slot_totals[slot_id]["prompt"]
+                            last_decoded = self._slot_totals[slot_id]["decoded"]
+                            
+                            delta_prompt = current_prompt - last_prompt
+                            if delta_prompt < 0:
+                                delta_prompt = current_prompt
+                                
+                            delta_decoded = current_decoded - last_decoded
+                            if delta_decoded < 0:
+                                delta_decoded = current_decoded
+                                
+                            self._global_prompt_total += delta_prompt
+                            self._global_decoded_total += delta_decoded
+                            
+                            self._slot_totals[slot_id]["prompt"] = current_prompt
+                            self._slot_totals[slot_id]["decoded"] = current_decoded
+                        
+                        metrics_data["encode_total"] = self._global_prompt_total
+                        metrics_data["decode_total"] = self._global_decoded_total
+                        
+                        time_delta = current_time - self._last_metrics_time
+                        if self._last_metrics_time > 0 and time_delta > 0:
+                            metrics_data["encode_tps"] = round((self._global_prompt_total - self._last_metrics_totals["encode"]) / time_delta, 1)
+                            metrics_data["decode_tps"] = round((self._global_decoded_total - self._last_metrics_totals["decode"]) / time_delta, 1)
+                            
+                            if metrics_data["encode_tps"] < 0:
+                                metrics_data["encode_tps"] = 0.0
+                            if metrics_data["decode_tps"] < 0:
+                                metrics_data["decode_tps"] = 0.0
+                                
+                        self._last_metrics_time = current_time
+                        self._last_metrics_totals["encode"] = self._global_prompt_total
+                        self._last_metrics_totals["decode"] = self._global_decoded_total
+                        return metrics_data
+        except Exception as e:
+            logger.error("Fehler beim Abrufen der Slot-Metriken: %s", e)
         return None
 
     def find_process(self):
@@ -234,31 +299,9 @@ class LLMManager:
 
         if process and self._health_url:
             health = await self.check_health(process["pid"])
-            metrics_text = await self.fetch_metrics()
-            if metrics_text:
-                import time
-                current_time = time.time()
-                prompt_tokens = 0
-                predicted_tokens = 0
-                for line in metrics_text.splitlines():
-                    if line.startswith("llamacpp:prompt_tokens_total "):
-                        prompt_tokens = int(float(line.split()[1]))
-                    elif line.startswith("llamacpp:tokens_predicted_total "):
-                        predicted_tokens = int(float(line.split()[1]))
-                
-                metrics_data["encode_total"] = prompt_tokens
-                metrics_data["decode_total"] = predicted_tokens
-                
-                if self._last_metrics_time > 0:
-                    dt = current_time - self._last_metrics_time
-                    if dt > 0:
-                        encode_diff = prompt_tokens - self._last_metrics.get("encode_total", 0)
-                        decode_diff = predicted_tokens - self._last_metrics.get("decode_total", 0)
-                        metrics_data["encode_tps"] = round(max(0, encode_diff / dt), 2)
-                        metrics_data["decode_tps"] = round(max(0, decode_diff / dt), 2)
-                        
-                self._last_metrics = metrics_data
-                self._last_metrics_time = current_time
+            metrics_result = await self.fetch_metrics()
+            if metrics_result:
+                metrics_data = metrics_result
 
         return {
             "name": self._name,
