@@ -87,7 +87,7 @@ class LLMOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialisierung."""
-        self.config_entry = config_entry
+        self.my_config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -96,8 +96,8 @@ class LLMOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current_interval = int(self.config_entry.options.get(
-            "scan_interval", self.config_entry.data.get("scan_interval", 60)
+        current_interval = int(self.my_config_entry.options.get(
+            "scan_interval", self.my_config_entry.data.get("scan_interval", 60)
         ))
 
         options_schema = vol.Schema(
