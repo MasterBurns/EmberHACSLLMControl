@@ -47,7 +47,7 @@ class LLMManager:
             return None
         
         try:
-            timeout = ClientTimeout(total=2)
+            timeout = ClientTimeout(total=5)
             slots_url = self._config.get("slots_url", f"http://127.0.0.1:{self._config.get('llm_port', 11434)}/slots")
             
             # Initialize tracking structures if not present
@@ -118,7 +118,7 @@ class LLMManager:
                         self._last_metrics_totals["decode"] = self._global_decoded_total
                         return metrics_data
         except Exception as e:
-            logger.error("Fehler beim Abrufen der Slot-Metriken: %s", e)
+            logger.error("Fehler beim Abrufen der Slot-Metriken: %s (%s)", e, type(e).__name__)
         return None
 
     def find_process(self):
